@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-
-import 'package:flutter/services.dart';
 import 'package:contacts_bridge/contacts_bridge.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const MyApp());
@@ -16,35 +14,55 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  String _platformVersion = 'Unknown';
   final _contactsBridgePlugin = ContactsBridge();
+  List<Map<String, String>> _contacts = [];
+  String _error = '';
 
   @override
   void initState() {
     super.initState();
-    initPlatformState();
   }
 
-  // Platform messages are asynchronous, so we initialize in an async method.
-  Future<void> initPlatformState() async {
-    String platformVersion;
-    // Platform messages may fail, so we use a try/catch PlatformException.
-    // We also handle the message potentially returning null.
+  Future<void> fetchContacts() async {
     try {
-      platformVersion =
-          await _contactsBridgePlugin.getPlatformVersion() ?? 'Unknown platform version';
-    } on PlatformException {
-      platformVersion = 'Failed to get platform version.';
+      final t1 = DateTime.now();
+      List<Map<String, String>> contacts = await ContactsBridge.getContacts();
+      final t2 = DateTime.now();
+      debugPrint(
+        'total time in fetching ${contacts.length} contacts: ${t2.difference(t1).inMilliseconds}',
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _contacts = contacts;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Error fetching contacts: $e';
+      });
     }
+  }
 
-    // If the widget was removed from the tree while the asynchronous platform
-    // message was in flight, we want to discard the reply rather than calling
-    // setState to update our non-existent appearance.
-    if (!mounted) return;
+  Future<void> addContact() async {
+    try {
+      await ContactsBridge.addContact("Alice Doe", "9876543210");
+      fetchContacts(); // Refresh contacts after adding
+    } catch (e) {
+      setState(() {
+        _error = 'Error adding contact: $e';
+      });
+    }
+  }
 
-    setState(() {
-      _platformVersion = platformVersion;
-    });
+  Future<void> deleteContact(String id) async {
+    try {
+      await ContactsBridge.deleteContact(id);
+      fetchContacts(); // Refresh contacts after deleting
+    } catch (e) {
+      setState(() {
+        _error = 'Error deleting contact: $e';
+      });
+    }
   }
 
   @override
@@ -52,10 +70,62 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: const Text('Contacts Plugin Example'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () async {
+                // Check permission status
+                PermissionStatus permissionStatus =
+                    await Permission.contacts.status;
+
+                if (permissionStatus.isDenied ||
+                    permissionStatus.isPermanentlyDenied) {
+                  // Request permission
+                  permissionStatus = await Permission.contacts.request();
+                }
+
+                if (permissionStatus.isGranted) {
+                  // If permission is granted, fetch contacts
+                  fetchContacts();
+                } else {
+                  // Handle case where permission is denied
+                  setState(() {
+                    _error =
+                        'Contacts permission denied. Please enable it in settings.';
+                  });
+                }
+              },
+            ),
+          ],
         ),
-        body: Center(
-          child: Text('Running on: $_platformVersion\n'),
+        body:
+            _error.isNotEmpty
+                ? Center(
+                  child: Text(
+                    _error,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                )
+                : _contacts.isEmpty
+                ? const Center(child: Text('No contacts found'))
+                : ListView.builder(
+                  itemCount: _contacts.length,
+                  itemBuilder: (context, index) {
+                    final contact = _contacts[index];
+                    return ListTile(
+                      title: Text(contact['name'] ?? 'Unknown'),
+                      subtitle: Text(contact['phone'] ?? 'No phone'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => deleteContact(contact['id'] ?? ''),
+                      ),
+                    );
+                  },
+                ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: addContact,
+          child: const Icon(Icons.add),
         ),
       ),
     );

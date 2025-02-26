@@ -57,31 +57,41 @@ class ContactsBridgePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
   private fun getContacts(result: MethodChannel.Result) {
     val contactsList = mutableListOf<Map<String, String>>()
     val resolver: ContentResolver? = activity?.contentResolver
-    val cursor: Cursor? =
-            resolver?.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(
-                            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                            ContactsContract.CommonDataKinds.Phone.NUMBER
-                    ),
-                    null,
-                    null,
-                    null
-            )
 
-    cursor?.use {
-      while (it.moveToNext()) {
-        val name =
-                it.getString(
-                        it.getColumnIndexOrThrow(
-                                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-                        )
-                )
-        val phone =
-                it.getString(
-                        it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                )
-        contactsList.add(mapOf("name" to name, "phone" to phone))
+    resolver?.let {
+      val cursor: Cursor? =
+              it.query(
+                      ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                      arrayOf(
+                              ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                              ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                              ContactsContract.CommonDataKinds.Phone.NUMBER
+                      ),
+                      null,
+                      null,
+                      null
+              )
+
+      cursor?.use { cur ->
+        while (cur.moveToNext()) {
+          val id =
+                  cur.getString(
+                          cur.getColumnIndexOrThrow(
+                                  ContactsContract.CommonDataKinds.Phone.CONTACT_ID
+                          )
+                  )
+          val name =
+                  cur.getString(
+                          cur.getColumnIndexOrThrow(
+                                  ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                          )
+                  )
+          val phone =
+                  cur.getString(
+                          cur.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                  )
+          contactsList.add(mapOf("id" to id, "name" to name, "phone" to phone))
+        }
       }
     }
 
@@ -93,56 +103,100 @@ class ContactsBridgePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     val phone = call.argument<String>("phone") ?: return
     val resolver: ContentResolver? = activity?.contentResolver
 
-    val values =
-            ContentValues().apply {
-              put(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
-              put(ContactsContract.RawContacts.ACCOUNT_NAME, null)
-            }
+    resolver?.let {
+      val values =
+              ContentValues().apply {
+                put(ContactsContract.RawContacts.ACCOUNT_TYPE, null as String?)
+                put(ContactsContract.RawContacts.ACCOUNT_NAME, null as String?)
+              }
 
-    val rawContactUri = resolver?.insert(ContactsContract.RawContacts.CONTENT_URI, values)
-    val rawContactId = rawContactUri?.lastPathSegment?.toLong() ?: return
+      val rawContactUri = it.insert(ContactsContract.RawContacts.CONTENT_URI, values)
+      val rawContactId = rawContactUri?.lastPathSegment?.toLong() ?: return
 
-    values.clear()
-    values.apply {
-      put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
-      put(
-              ContactsContract.Data.MIMETYPE,
-              ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE
-      )
-      put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
+      // Insert name
+      val nameValues =
+              ContentValues().apply {
+                put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
+                put(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE
+                )
+                put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
+              }
+      it.insert(ContactsContract.Data.CONTENT_URI, nameValues)
+
+      // Insert phone number
+      val phoneValues =
+              ContentValues().apply {
+                put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
+                put(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE
+                )
+                put(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
+                put(
+                        ContactsContract.CommonDataKinds.Phone.TYPE,
+                        ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
+                )
+              }
+      it.insert(ContactsContract.Data.CONTENT_URI, phoneValues)
+
+      result.success(true)
     }
-    resolver.insert(ContactsContract.Data.CONTENT_URI, values)
-
-    values.clear()
-    values.apply {
-      put(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
-      put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
-      put(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
-      put(
-              ContactsContract.CommonDataKinds.Phone.TYPE,
-              ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
-      )
-    }
-    resolver.insert(ContactsContract.Data.CONTENT_URI, values)
-
-    result.success(null)
+            ?: result.error("ERROR", "Content Resolver is null", null)
   }
 
   private fun deleteContact(call: MethodCall, result: MethodChannel.Result) {
     val id = call.argument<String>("id") ?: return
     val resolver: ContentResolver? = activity?.contentResolver
-    val rowsDeleted =
-            resolver?.delete(
-                    ContactsContract.RawContacts.CONTENT_URI,
-                    ContactsContract.RawContacts.CONTACT_ID + " = ?",
-                    arrayOf(id)
-            )
 
-    result.success(rowsDeleted ?: 0)
+    resolver?.let {
+      val rowsDeleted =
+              it.delete(
+                      ContactsContract.RawContacts.CONTENT_URI,
+                      ContactsContract.RawContacts.CONTACT_ID + " = ?",
+                      arrayOf(id)
+              )
+      result.success(rowsDeleted > 0)
+    }
+            ?: result.error("ERROR", "Content Resolver is null", null)
   }
 
   private fun updateContact(call: MethodCall, result: MethodChannel.Result) {
-    // Implement update logic similar to deleteContact and addContact
-    result.notImplemented()
+    val id = call.argument<String>("id") ?: return
+    val newName = call.argument<String>("name")
+    val newPhone = call.argument<String>("phone")
+    val resolver: ContentResolver? = activity?.contentResolver
+
+    resolver?.let {
+      if (!newName.isNullOrBlank()) {
+        val nameValues =
+                ContentValues().apply {
+                  put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, newName)
+                }
+        it.update(
+                ContactsContract.Data.CONTENT_URI,
+                nameValues,
+                "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+                arrayOf(id, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+        )
+      }
+
+      if (!newPhone.isNullOrBlank()) {
+        val phoneValues =
+                ContentValues().apply {
+                  put(ContactsContract.CommonDataKinds.Phone.NUMBER, newPhone)
+                }
+        it.update(
+                ContactsContract.Data.CONTENT_URI,
+                phoneValues,
+                "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+                arrayOf(id, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+        )
+      }
+
+      result.success(true)
+    }
+            ?: result.error("ERROR", "Content Resolver is null", null)
   }
 }
