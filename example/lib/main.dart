@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:contacts_bridge/contacts_bridge.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -14,7 +15,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  List<Map<String, Object>> _contacts = [];
+  List<ContactModel> _contacts = [];
   String _error = '';
 
   @override
@@ -49,7 +50,7 @@ class _MyAppState extends State<MyApp> {
 
       if (!mounted) return;
 
-      List<Map<String, Object>> processedContacts = [];
+      final Map<String, ContactModel> uniqueContacts = {};
 
       for (var contact in contacts) {
         String name = contact['name'] as String? ?? 'Unknown';
@@ -57,20 +58,22 @@ class _MyAppState extends State<MyApp> {
         List<dynamic> phones = contact['phones'] as List<dynamic>? ?? [];
 
         for (var phone in phones) {
-          processedContacts.add({
-            'id': id,
-            'name': name,
-            'phone': phone.toString(),
-          });
+          String normalizedPhone = _normalizePhone(phone.toString());
+          if (normalizedPhone.length == 10) {
+            uniqueContacts[normalizedPhone] = ContactModel(
+              id: id,
+              name: name,
+              phone: normalizedPhone,
+            );
+          }
         }
       }
 
-      debugPrint(
-        'Processed contacts length before setState: ${processedContacts.length}',
-      );
-      processedContacts.sort(
-        (a, b) => (a["name"] as String).compareTo(b["name"] as String),
-      );
+      List<ContactModel> processedContacts =
+          uniqueContacts.values.toList()
+            ..sort((a, b) => a.name.compareTo(b.name));
+
+      debugPrint('Final contacts length: ${processedContacts.length}');
 
       if (mounted) {
         setState(() {
@@ -84,6 +87,14 @@ class _MyAppState extends State<MyApp> {
         _error = 'Error fetching contacts: $e';
       });
     }
+  }
+
+  // **Normalize phone numbers (keep last 10 digits)**
+  String _normalizePhone(String phone) {
+    String digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
+    return digitsOnly.length >= 10
+        ? digitsOnly.substring(digitsOnly.length - 10)
+        : '';
   }
 
   Future<void> addContact() async {
@@ -137,14 +148,12 @@ class _MyAppState extends State<MyApp> {
                   itemBuilder: (context, index) {
                     final contact = _contacts[index];
                     return ListTile(
-                      title: Text(contact['name'] as String? ?? 'Unknown'),
-                      subtitle: Text(
-                        contact['phone'] as String? ?? 'No number',
-                      ),
+                      title: Text(contact.name as String? ?? 'Unknown'),
+                      subtitle: Text(contact.phone as String? ?? 'No number'),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed:
-                            () => deleteContact(contact['id'] as String? ?? ''),
+                            () => deleteContact(contact.id as String? ?? ''),
                       ),
                     );
                   },
@@ -156,4 +165,19 @@ class _MyAppState extends State<MyApp> {
       ),
     );
   }
+}
+
+final class ContactModel extends Equatable {
+  final String id;
+  final String name;
+  final String phone;
+
+  const ContactModel({
+    required this.id,
+    required this.name,
+    required this.phone,
+  });
+
+  @override
+  List<Object?> get props => [id, name, phone];
 }
