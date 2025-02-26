@@ -68,6 +68,9 @@ class _MyAppState extends State<MyApp> {
       debugPrint(
         'Processed contacts length before setState: ${processedContacts.length}',
       );
+      processedContacts.sort(
+        (a, b) => (a["name"] as String).compareTo(b["name"] as String),
+      );
 
       if (mounted) {
         setState(() {
