@@ -20,6 +20,22 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    requestPermissionAndFetchContacts();
+  }
+
+  Future<void> requestPermissionAndFetchContacts() async {
+    PermissionStatus status = await Permission.contacts.request();
+    debugPrint("Permission status: ${status.name}");
+    if (status.isGranted) {
+      fetchContacts();
+    } else if (status.isPermanentlyDenied) {
+      debugPrint("Permission permanently denied. Opening settings...");
+      openAppSettings();
+    } else {
+      setState(() {
+        _error = 'Contacts permission denied. Please enable it in settings.';
+      });
+    }
   }
 
   Future<void> fetchContacts() async {
@@ -32,13 +48,7 @@ class _MyAppState extends State<MyApp> {
       );
 
       if (!mounted) return;
-      debugPrint(
-        contacts.isNotEmpty
-            ? contacts.first.toString()
-            : "No contacts fetched.",
-      );
 
-      // Process contacts to store each phone number separately
       List<Map<String, Object>> processedContacts = [];
 
       for (var contact in contacts) {
@@ -50,14 +60,21 @@ class _MyAppState extends State<MyApp> {
           processedContacts.add({
             'id': id,
             'name': name,
-            'phone': phone.toString(), // Ensure it's a string
+            'phone': phone.toString(),
           });
         }
       }
 
-      setState(() {
-        _contacts = processedContacts;
-      });
+      debugPrint(
+        'Processed contacts length before setState: ${processedContacts.length}',
+      );
+
+      if (mounted) {
+        setState(() {
+          _contacts = processedContacts;
+          debugPrint('SetState called, contacts length: ${_contacts.length}');
+        });
+      }
     } catch (e, stackTrace) {
       debugPrint("Error fetching contacts: $e\n$stackTrace");
       setState(() {
@@ -69,7 +86,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> addContact() async {
     try {
       await ContactsBridge.addContact("Alice Doe", "9876543210");
-      fetchContacts(); // Refresh contacts after adding
+      fetchContacts();
     } catch (e) {
       setState(() {
         _error = 'Error adding contact: $e';
@@ -97,24 +114,7 @@ class _MyAppState extends State<MyApp> {
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: () async {
-                debugPrint('Request button tapped…');
-                PermissionStatus status = await Permission.contacts.request();
-                debugPrint("Permission status: ${status.name}");
-                if (status.isGranted) {
-                  fetchContacts();
-                } else if (status.isPermanentlyDenied) {
-                  debugPrint(
-                    "Permission permanently denied. Opening settings...",
-                  );
-                  openAppSettings();
-                } else {
-                  setState(() {
-                    _error =
-                        'Contacts permission denied. Please enable it in settings.';
-                  });
-                }
-              },
+              onPressed: requestPermissionAndFetchContacts,
             ),
           ],
         ),
@@ -129,6 +129,7 @@ class _MyAppState extends State<MyApp> {
                 : _contacts.isEmpty
                 ? const Center(child: Text('No contacts found'))
                 : ListView.builder(
+                  key: ValueKey(_contacts.length), // Ensures proper rebuilds
                   itemCount: _contacts.length,
                   itemBuilder: (context, index) {
                     final contact = _contacts[index];
