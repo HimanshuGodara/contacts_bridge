@@ -6,9 +6,9 @@ class MethodChannelContactsBridge extends ContactsBridgePlatform {
   static const MethodChannel _channel = MethodChannel('contacts_bridge');
 
   @override
-  Future<List<Map<String, String>>> getContacts() async {
+  Future<List<Map<String, Object>>> getContacts() async {
     final List<dynamic> contacts = await _channel.invokeMethod('getContacts');
-    return contacts.map((e) => Map<String, String>.from(e)).toList();
+    return contacts.map((e) => Map<String, Object>.from(e)).toList();
   }
 
   @override

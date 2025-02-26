@@ -14,8 +14,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final _contactsBridgePlugin = ContactsBridge();
-  List<Map<String, String>> _contacts = [];
+  List<Map<String, Object>> _contacts = [];
   String _error = '';
 
   @override
@@ -26,17 +25,41 @@ class _MyAppState extends State<MyApp> {
   Future<void> fetchContacts() async {
     try {
       final t1 = DateTime.now();
-      List<Map<String, String>> contacts = await ContactsBridge.getContacts();
+      List<Map<String, Object>> contacts = await ContactsBridge.getContacts();
       final t2 = DateTime.now();
       debugPrint(
-        'total time in fetching ${contacts.length} contacts: ${t2.difference(t1).inMilliseconds}',
+        'Total time in fetching ${contacts.length} contacts: ${t2.difference(t1).inMilliseconds} ms',
       );
 
       if (!mounted) return;
+      debugPrint(
+        contacts.isNotEmpty
+            ? contacts.first.toString()
+            : "No contacts fetched.",
+      );
+
+      // Process contacts to store each phone number separately
+      List<Map<String, Object>> processedContacts = [];
+
+      for (var contact in contacts) {
+        String name = contact['name'] as String? ?? 'Unknown';
+        String id = contact['id'] as String? ?? '';
+        List<dynamic> phones = contact['phones'] as List<dynamic>? ?? [];
+
+        for (var phone in phones) {
+          processedContacts.add({
+            'id': id,
+            'name': name,
+            'phone': phone.toString(), // Ensure it's a string
+          });
+        }
+      }
+
       setState(() {
-        _contacts = contacts;
+        _contacts = processedContacts;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint("Error fetching contacts: $e\n$stackTrace");
       setState(() {
         _error = 'Error fetching contacts: $e';
       });
@@ -75,21 +98,17 @@ class _MyAppState extends State<MyApp> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () async {
-                // Check permission status
-                PermissionStatus permissionStatus =
-                    await Permission.contacts.status;
-
-                if (permissionStatus.isDenied ||
-                    permissionStatus.isPermanentlyDenied) {
-                  // Request permission
-                  permissionStatus = await Permission.contacts.request();
-                }
-
-                if (permissionStatus.isGranted) {
-                  // If permission is granted, fetch contacts
+                debugPrint('Request button tapped…');
+                PermissionStatus status = await Permission.contacts.request();
+                debugPrint("Permission status: ${status.name}");
+                if (status.isGranted) {
                   fetchContacts();
+                } else if (status.isPermanentlyDenied) {
+                  debugPrint(
+                    "Permission permanently denied. Opening settings...",
+                  );
+                  openAppSettings();
                 } else {
-                  // Handle case where permission is denied
                   setState(() {
                     _error =
                         'Contacts permission denied. Please enable it in settings.';
@@ -114,11 +133,14 @@ class _MyAppState extends State<MyApp> {
                   itemBuilder: (context, index) {
                     final contact = _contacts[index];
                     return ListTile(
-                      title: Text(contact['name'] ?? 'Unknown'),
-                      subtitle: Text(contact['phone'] ?? 'No phone'),
+                      title: Text(contact['name'] as String? ?? 'Unknown'),
+                      subtitle: Text(
+                        contact['phone'] as String? ?? 'No number',
+                      ),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => deleteContact(contact['id'] ?? ''),
+                        onPressed:
+                            () => deleteContact(contact['id'] as String? ?? ''),
                       ),
                     );
                   },
