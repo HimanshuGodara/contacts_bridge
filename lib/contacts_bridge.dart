@@ -1,7 +1,7 @@
 import 'contacts_bridge_platform_interface.dart';
 
 class ContactsBridge {
-  static Future<List<Map<String, Object>>> getContacts() {
+  static Future<List<Map<String, dynamic>>> getContacts() {
     return ContactsBridgePlatform.instance.getContacts();
   }
 

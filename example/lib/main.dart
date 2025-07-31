@@ -21,10 +21,10 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    requestPermissionAndFetchContacts();
+    requestPermissionAndFetchContacts(context);
   }
 
-  Future<void> requestPermissionAndFetchContacts() async {
+  Future<void> requestPermissionAndFetchContacts(BuildContext context) async {
     PermissionStatus status = await Permission.contacts.request();
     debugPrint("Permission status: ${status.name}");
     if (status.isGranted) {
@@ -42,7 +42,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> fetchContacts() async {
     try {
       final t1 = DateTime.now();
-      List<Map<String, Object>> contacts = await ContactsBridge.getContacts();
+      List<Map<String, dynamic>> contacts = await ContactsBridge.getContacts();
       final t2 = DateTime.now();
       debugPrint(
         'Total time in fetching ${contacts.length} contacts: ${t2.difference(t1).inMilliseconds} ms',
@@ -84,7 +84,7 @@ class _MyAppState extends State<MyApp> {
     } catch (e, stackTrace) {
       debugPrint("Error fetching contacts: $e\n$stackTrace");
       setState(() {
-        _error = 'Error fetching contacts: $e';
+        _error = 'Error fetching contacts: $e\n$stackTrace';
       });
     }
   }
@@ -101,9 +101,9 @@ class _MyAppState extends State<MyApp> {
     try {
       await ContactsBridge.addContact("Alice Doe", "9876543210");
       fetchContacts();
-    } catch (e) {
+    } catch (e, st) {
       setState(() {
-        _error = 'Error adding contact: $e';
+        _error = 'Error adding contact: $e, stack: $st';
       });
     }
   }
@@ -112,9 +112,9 @@ class _MyAppState extends State<MyApp> {
     try {
       await ContactsBridge.deleteContact(id);
       fetchContacts(); // Refresh contacts after deleting
-    } catch (e) {
+    } catch (e, st) {
       setState(() {
-        _error = 'Error deleting contact: $e';
+        _error = 'Error deleting contact: $e \n $st';
       });
     }
   }
@@ -126,9 +126,24 @@ class _MyAppState extends State<MyApp> {
         appBar: AppBar(
           title: const Text('Contacts Plugin Example'),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: requestPermissionAndFetchContacts,
+            Builder(
+              builder: (context) {
+                return IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () {
+                    try {
+                      requestPermissionAndFetchContacts(context);
+                    } catch (e, st) {
+                      ScaffoldMessenger.of(context).showMaterialBanner(
+                        MaterialBanner(
+                          content: Text('error: $e, stack: $st'),
+                          actions: [],
+                        ),
+                      );
+                    }
+                  },
+                );
+              },
             ),
           ],
         ),

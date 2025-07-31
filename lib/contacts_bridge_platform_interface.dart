@@ -15,7 +15,7 @@ abstract class ContactsBridgePlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future<List<Map<String, Object>>> getContacts();
+  Future<List<Map<String, dynamic>>> getContacts();
 
   Future<void> addContact(String name, String phone);
 

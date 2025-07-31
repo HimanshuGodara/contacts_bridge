@@ -7,13 +7,13 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 class MockContactsBridgePlatform
     with MockPlatformInterfaceMixin
     implements ContactsBridgePlatform {
-
   @override
   Future<String?> getPlatformVersion() => Future.value('42');
 }
 
 void main() {
-  final ContactsBridgePlatform initialPlatform = ContactsBridgePlatform.instance;
+  final ContactsBridgePlatform initialPlatform =
+      ContactsBridgePlatform.instance;
 
   test('$MethodChannelContactsBridge is the default instance', () {
     expect(initialPlatform, isInstanceOf<MethodChannelContactsBridge>());
